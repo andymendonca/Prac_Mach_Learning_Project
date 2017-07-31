@@ -1,0 +1,126 @@
+---
+title: "Practical Machine Learning Project"
+author: "Andrew Mendonca"
+date: "July 30, 2017"
+output: 
+  html_document: 
+    keep_md: yes
+---
+
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to 
+collect a large amount of data about personal activity relatively inexpensively. 
+These type of devices are part of the quantified self movement - a group of enthusiasts 
+who take measurements about themselves regularly to improve their health, to find 
+patterns in their behavior, or because they are tech geeks. One thing that people 
+regularly do is quantify how much of a particular activity they do, but they rarely 
+quantify how well they do it. 
+
+In this project, your goal will be to use data from accelerometers on the belt, 
+forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts 
+correctly and incorrectly in 5 different ways. More information is available from the 
+website here: http://groupware.les.inf.puc-rio.br/har.
+
+## Load the data files
+
+Load both the training and test files.
+
+```{r, echo = TRUE, cache = TRUE}
+train_file <- read.csv("pml-training.csv", na.strings = cbind("NA", ""))
+test_file <- read.csv("pml-testing.csv", na.strings = cbind("NA", ""))
+```
+Determine how many observations and variables are in both of the files.
+
+```{r, echo = TRUE, cache = TRUE}
+dim(train_file)
+dim(test_file)
+```
+The training data set has 19622 observations and 160 variables, whereas the
+testing data set has 20 observations and 160 variables.
+
+## Clean the data
+Delete predictors of the training data set that have any missing values.
+
+```{r, echo = TRUE, cache = TRUE}
+train_file <- train_file[, colSums(is.na(train_file)) == 0]
+test_file <- test_file[, colSums(is.na(train_file)) == 0]
+```
+Remove the first seven predictors that have less predicting power for the variable `classe`.
+
+```{r, echo = TRUE, cache = TRUE}
+train_value <- train_file[, -c(1:7)]
+test_value <- test_file[, -c(1:7)]
+dim(train_value)
+dim(test_value)
+```
+The cleaned data sets `train_value` and `test_value` have the same number of observations
+as the original training and testing data sets, but the data set `train_value` has 53
+variables and the data set `test_value` has 153 variables.
+
+## Splitting the data
+To retrieve the out-of-sample errors, we split the data set `train_value` into a training
+data set for prediction and a validation set for computing out-of-sample errors.
+
+```{r, echo = TRUE, cache = TRUE}
+library(caret)
+set.seed(7826)
+values_in_train <- createDataPartition(train_value$classe, p = 0.7, list = FALSE)
+train_split <- train_value[values_in_train, ]
+valid_split <- train_value[-values_in_train, ]
+```
+
+## Classification Trees
+When doing k-fold cross validation, we use the 5-fold cross validation to save time
+for computing.
+
+```{r, echo = TRUE, cache = TRUE}
+library(rattle)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+ctrl_values <- trainControl(method = "cv", number = 5)
+fit_values <- train(classe ~ ., data = train_split, method = "rpart", trControl = ctrl_values)
+print(fit_values, digits = 4)
+fancyRpartPlot(fit_values$finalModel)
+```
+
+Use the validation data set to predict the outcome and then show the result.
+
+```{r, echo = TRUE, cache = TRUE}
+prediction_values <- predict(fit_values, valid_split)
+confusion_values <- confusionMatrix(valid_split$classe, prediction_values)
+print(confusion_values)
+accurate_value <- confusion_values$overall[1]
+print(accurate_value)
+```
+The accuracy rate appears to be 0.5, which means the out-of-sample error rate is 0.5. The
+classification tree may not be useful for predicting the outcome `classe`.
+
+## Random forests
+We will use a random forest to predict the outcome instead of the classification tree.
+
+```{r, echo = TRUE, cache = TRUE}
+library(randomForest)
+fit_newvalue <- randomForest(classe ~ ., data = train_split)
+print(fit_newvalue, digits = 4)
+```
+
+Use the validation data set to predict the outcome and then show the result.
+
+```{r, echo = TRUE, cache = TRUE}
+prediction_newvalues <- predict(fit_newvalue, valid_split)
+confusion_newvalues <- confusionMatrix(valid_split$classe, prediction_newvalues)
+print(confusion_newvalues)
+accurate_newvalue <- confusion_newvalues$overall[1]
+print(accurate_newvalue)
+```
+The accuracy rate is 0.996, which means the out-of-sample error rate is 0.009. This is
+probably because many of the predictors are highly correlated. Using random forests can
+lead to more accurate results, even though they may be difficult to interpret.
+
+## Prediction
+Now for the testing data set, let's use the random forest to predict the outcome `classe`.
+
+```{r, echo = TRUE, cache = TRUE}
+(predict(fit_newvalue, test_value))
+```
